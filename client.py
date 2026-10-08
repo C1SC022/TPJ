@@ -4,8 +4,9 @@ import pygame
 
 HOST = input("IP do Server: ").strip() or "127.0.0.1"
 
-s = socket(AF_INET, SOCK_STREAM)
+s = socket(AF_INET, SOCK_DGRAM)
 s.connect((HOST, 8080))
+s.send(b"hello\n")
 print("Connected to server!")
 
 my_id = None

@@ -4,13 +4,13 @@ import time
 
 PORT = 8080
 
-s = socket(AF_INET, SOCK_STREAM)
+s = socket(AF_INET, SOCK_DGRAM)
 s.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 s.bind(("0.0.0.0", PORT))
-s.listen(2)
-print(f"[SERVER] Listening on port {PORT}...")
+print(f"[SERVER] Listening for UDP packets on port {PORT}...")
 
 clients = []
+client_ids = {}
 paddles = {1: 250, 2: 250}
 ball_x, ball_y = 400, 300
 velocity_x, velocity_y = 300, 240
@@ -33,32 +33,31 @@ def update_ball(dt):
     ball_x, ball_y = 400, 300
 
 
-def handle_client(conn, player_id):
-  buffer = ""
-  try:
-    while True:
-      data = conn.recv(1024)
-      if not data:
-        break
-      buffer += data.decode()
-      while "\n" in buffer:
-        msg, buffer = buffer.split("\n", 1)
-        try:
-          paddles[player_id] = max(0, min(500, int(msg)))
-        except ValueError:
-          pass
-  except OSError:
-    pass
-  print(f"[SERVER] Player {player_id} disconnected")
+def receive_messages():
+  while True:
+    try:
+      data, addr = s.recvfrom(1024)
+      if addr not in client_ids:
+        if len(client_ids) >= 2:
+          continue
+        client_ids[addr] = len(client_ids) + 1
+        clients.append(addr)
+        player_id = client_ids[addr]
+        s.sendto(f"{player_id}\n".encode(), addr)
+        print(f"[SERVER] Player {player_id} connected ({addr[0]})")
+
+      player_id = client_ids[addr]
+      for msg in data.decode().splitlines():
+        if msg != "hello":
+          try:
+            paddles[player_id] = max(0, min(500, int(msg)))
+          except ValueError:
+            pass
+    except OSError:
+      break
 
 
-for player_id in (1, 2):
-  conn, addr = s.accept()
-  conn.sendall(f"{player_id}\n".encode())
-  clients.append(conn)
-  threading.Thread(target=handle_client, args=(conn, player_id), daemon=True).start()
-  print(f"[SERVER] Player {player_id} connected ({addr[0]})")
-
+threading.Thread(target=receive_messages, daemon=True).start()
 print("[SERVER] Game started!")
 
 last_update = time.perf_counter()
@@ -68,9 +67,9 @@ while True:
   last_update = frame_start
   update_ball(dt)
   state = f"{round(ball_x)},{round(ball_y)},{paddles[1]},{paddles[2]}\n".encode()
-  for c in clients:
+  for addr in clients:
     try:
-      c.sendall(state)
+      s.sendto(state, addr)
     except OSError:
       pass
   elapsed = time.perf_counter() - frame_start
