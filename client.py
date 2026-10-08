@@ -60,7 +60,11 @@ while running:
       my_y = min(500, my_y + 360 * dt)
     current_y = round(my_y)
     if current_y != last_sent_y:
-      s.sendall(f"{current_y}\n".encode())
+      try:
+        s.sendall(f"{current_y}\n".encode())
+      except OSError:
+        running = False
+        break
       last_sent_y = current_y
 
   x_ball = 800 - ball_x if my_id == 2 else ball_x
